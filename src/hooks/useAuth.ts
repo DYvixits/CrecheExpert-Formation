@@ -29,9 +29,9 @@ export function useAuth() {
 
       if (state.user && state.isAuthenticated) {
         try {
-          const profileData = await blink.db.user_profiles.get(state.user.id)
-          if (profileData) {
-            setProfile(profileData as unknown as UserProfile)
+          const results = await blink.db.user_profiles.list({ where: { userId: state.user.id }, limit: 1 })
+          if (results && results.length > 0) {
+            setProfile(results[0] as unknown as UserProfile)
           } else {
             const newProfile: UserProfile = {
               userId: state.user.id,

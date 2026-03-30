@@ -21,7 +21,7 @@ export default function SettingsPage() {
     if (!user) return
     setIsSaving(true)
     try {
-      await blink.db.user_profiles.update(user.id, {
+      await blink.db.user_profiles.update({ userId: user.id }, {
         fullName: profile?.fullName,
         diploma: profile?.diploma
       })
