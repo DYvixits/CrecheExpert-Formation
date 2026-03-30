@@ -16,7 +16,9 @@ export default function LandingPage() {
   }, [isAuthenticated, isLoading])
 
   const handleStart = () => {
-    blink.auth.login()
+    // After managed auth signup, Blink will redirect back here.
+    // We trigger email verification once the user lands as authenticated.
+    blink.auth.login(window.location.origin + '/')
   }
 
   return (

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Page, PageHeader, PageTitle, PageDescription, PageBody, StatGroup, Stat, Card, CardContent, CardHeader, CardTitle, Button, Banner, EmptyState } from '@blinkdotnew/ui'
-import { TrendingUp, AlertCircle, ShieldCheck, GraduationCap, ClipboardCheck, ArrowRight } from 'lucide-react'
+import { TrendingUp, AlertCircle, ShieldCheck, GraduationCap, ClipboardCheck, ArrowRight, Mail } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { blink } from '../blink/client'
 import { useQuery } from '@tanstack/react-query'
@@ -9,6 +9,8 @@ import { useNavigate } from '@tanstack/react-router'
 export default function DashboardPage() {
   const { profile, user } = useAuth()
   const navigate = useNavigate()
+
+  const isEmailVerified = profile?.emailVerified || Number((user as any)?.emailVerified) > 0
 
   const { data: assessments, isLoading } = useQuery({
     queryKey: ['assessments', user?.id],
