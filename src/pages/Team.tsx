@@ -75,12 +75,11 @@ export default function TeamPage() {
   const handleAddMember = async () => {
     if (!newMember.fullName || !newMember.role) return
     try {
-      await blink.db.user_profiles.create({
-        user_id: `temp_${Date.now()}`,
+      await blink.db.user_profiles.upsert({
+        userId: `temp_${Date.now()}`,
         role: newMember.role,
         fullName: newMember.fullName,
         structureId: profile?.structureId || 'none',
-        createdAt: new Date().toISOString()
       })
       toast.success('Membre ajouté à votre structure')
       setIsAdding(false)

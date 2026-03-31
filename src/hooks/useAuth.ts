@@ -41,17 +41,16 @@ export function useAuth() {
           if (results && results.length > 0) {
             setProfile(results[0] as unknown as UserProfile)
           } else {
-            const newProfile: UserProfile = {
-              userId: state.user.id,
-              role: ((state.user as AuthUser).role as UserRole) || 'professional',
-              fullName:
-                (state.user as AuthUser).displayName ||
-                (state.user as AuthUser).email?.split('@')[0] ||
-                'Utilisateur',
-              emailVerified: Number((state.user as AuthUser).emailVerified) > 0,
+            const authUser = state.user as AuthUser
+            const newProfile = {
+              userId: authUser.id,
+              role: (authUser.role as UserRole) || 'professional',
+              fullName: authUser.displayName || authUser.email?.split('@')[0] || 'Utilisateur',
+              emailVerified: Number(authUser.emailVerified) > 0,
             }
-            await blink.db.user_profiles.create(newProfile)
-            setProfile(newProfile)
+            // upsert avoids duplicate-key errors on race conditions
+            await blink.db.user_profiles.upsert(newProfile)
+            setProfile(newProfile as UserProfile)
           }
         } catch (error) {
           console.error('Error fetching profile:', error)
