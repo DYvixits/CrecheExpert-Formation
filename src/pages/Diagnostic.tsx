@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Page, PageHeader, PageTitle, PageDescription, PageBody, Button, Card, CardContent, CardHeader, CardTitle, RadioGroup, RadioGroupItem, Label, Banner, LoadingOverlay, Progress, toast } from '@blinkdotnew/ui'
-import { ClipboardCheck, ShieldCheck, AlertCircle, ArrowLeft, ArrowRight, Save, CheckCircle2 } from 'lucide-react'
+import { ClipboardCheck, ShieldCheck, AlertCircle, ArrowLeft, ArrowRight, Save, CheckCircle2, Download } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { blink } from '../blink/client'
 import { diagnosticQuestions } from '../data/questions'
 import { useNavigate } from '@tanstack/react-router'
+import { exportDiagnosticReportPdf } from '../lib/pdf'
 
 export default function DiagnosticPage() {
   const { user, profile } = useAuth()
@@ -102,6 +103,28 @@ export default function DiagnosticPage() {
           <div className="w-full space-y-4">
             <Button className="w-full" onClick={() => navigate({ to: '/' })}>
               Retour au tableau de bord
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => exportDiagnosticReportPdf({
+                fullName: profile?.fullName,
+                score: assessmentResult.score,
+                completedAt: new Date(),
+                items: diagnosticQuestions.map(q => {
+                  const option = q.options.find(o => o.value === responses[q.id])
+                  return {
+                    category: q.category,
+                    text: q.text,
+                    answerLabel: option?.label ?? 'Sans réponse',
+                    isCompliant: option?.isCompliant ?? false,
+                    remediation: option?.remediation
+                  }
+                })
+              })}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Télécharger le rapport (PDF)
             </Button>
             <Button variant="outline" className="w-full" onClick={() => setAssessmentResult(null)}>
               Relancer un diagnostic

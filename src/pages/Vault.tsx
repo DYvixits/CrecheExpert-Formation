@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Page, PageHeader, PageTitle, PageDescription, PageBody, DataTable, Card, CardContent, CardHeader, CardTitle, Badge, Button, EmptyState, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Input, Label, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, toast, Stat } from '@blinkdotnew/ui'
-import { ShieldCheck, FileText, Upload, Plus, AlertCircle, Clock, CheckCircle2, FileUp, Trash2 } from 'lucide-react'
+import { ShieldCheck, FileText, Upload, Plus, AlertCircle, Clock, CheckCircle2, FileUp, Trash2, Download } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { differenceInCalendarDays } from 'date-fns'
 import { blink } from '../blink/client'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useAuth } from '../hooks/useAuth'
+import { exportComplianceVaultPdf } from '../lib/pdf'
 
 const EXPIRY_WARNING_DAYS = 30
 
@@ -155,6 +156,18 @@ export default function VaultPage() {
           </PageDescription>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            disabled={!docs || docs.length === 0}
+            onClick={() => exportComplianceVaultPdf({
+              fullName: profile?.fullName,
+              generatedAt: new Date(),
+              documents: docs ?? []
+            })}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Exporter le dossier (PDF)
+          </Button>
           <Button onClick={() => setIsAdding(true)} className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
             <Plus className="w-4 h-4 mr-2" />
             Ajouter une preuve
