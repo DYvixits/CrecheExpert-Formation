@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Page, PageHeader, PageTitle, PageDescription, PageBody, DataTable, Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, SearchInput, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, EmptyState } from '@blinkdotnew/ui'
-import { GraduationCap, ShieldCheck, Search, Filter, ArrowRight, Star, Clock, Globe } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { Page, PageHeader, PageTitle, PageDescription, PageBody, DataTable, Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, SearchInput, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, EmptyState, toast } from '@blinkdotnew/ui'
+import { GraduationCap, ShieldCheck, Search, Filter, ArrowRight, Star, Clock, Globe, CheckCircle2 } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { blink } from '../blink/client'
 import { type ColumnDef } from '@tanstack/react-table'
+import { useAuth } from '../hooks/useAuth'
 
 interface Training {
   id: string
@@ -18,8 +19,11 @@ interface Training {
 }
 
 export default function CatalogPage() {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>('all')
+  const [enrollingId, setEnrollingId] = useState<string | null>(null)
 
   const { data: trainings, isLoading } = useQuery({
     queryKey: ['trainings', category],
@@ -29,6 +33,39 @@ export default function CatalogPage() {
       return await blink.db.training_catalog.list({ where: filters }) as Training[]
     }
   })
+
+  const { data: enrollments } = useQuery({
+    queryKey: ['training_enrollments', user?.id],
+    queryFn: () => blink.db.training_enrollments.list({ where: { userId: user?.id } }) as Promise<{ id: string; trainingId: string; status: string }[]>,
+    enabled: !!user?.id
+  })
+
+  const enrolledTrainingIds = new Set((enrollments ?? []).map(e => e.trainingId))
+
+  const handleEnroll = async (training: Training) => {
+    if (!user || enrolledTrainingIds.has(training.id)) return
+    setEnrollingId(training.id)
+    try {
+      await blink.db.training_enrollments.upsert(
+        {
+          id: `enr_${user.id}_${training.id}`,
+          userId: user.id,
+          trainingId: training.id,
+          trainingTitle: training.title,
+          status: 'in_progress',
+          enrolledAt: new Date().toISOString()
+        },
+        { onConflict: 'id' }
+      )
+      toast.success(`Inscription enregistrée : ${training.title}`)
+      queryClient.invalidateQueries({ queryKey: ['training_enrollments'] })
+    } catch (error) {
+      console.error('Enrollment error:', error)
+      toast.error("Erreur lors de l'inscription")
+    } finally {
+      setEnrollingId(null)
+    }
+  }
 
   const filteredTrainings = trainings?.filter(t =>
     t.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -83,11 +120,28 @@ export default function CatalogPage() {
     },
     {
       id: 'actions',
-      cell: () => (
-        <Button variant="ghost" size="icon" className="hover:text-primary hover:bg-primary/5">
-          <ArrowRight className="w-4 h-4" />
-        </Button>
-      )
+      cell: ({ row }) => {
+        const isEnrolled = enrolledTrainingIds.has(row.original.id)
+        if (isEnrolled) {
+          return (
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 gap-1 whitespace-nowrap">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Inscrit
+            </Badge>
+          )
+        }
+        return (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="hover:text-primary hover:bg-primary/5 font-bold whitespace-nowrap"
+            disabled={enrollingId === row.original.id}
+            onClick={() => handleEnroll(row.original)}
+          >
+            {enrollingId === row.original.id ? 'Inscription...' : "S'inscrire"}
+            <ArrowRight className="w-4 h-4 ml-1.5" />
+          </Button>
+        )
+      }
     }
   ]
 

@@ -1,10 +1,22 @@
 import { useState } from 'react'
 import { Page, PageHeader, PageTitle, PageDescription, PageBody, DataTable, Card, CardContent, CardHeader, CardTitle, Badge, Button, EmptyState, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Input, Label, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, toast, Stat } from '@blinkdotnew/ui'
-import { ShieldCheck, FileText, Upload, Plus, AlertCircle, Clock, CheckCircle2, FileUp, Trash2 } from 'lucide-react'
+import { ShieldCheck, FileText, Upload, Plus, AlertCircle, Clock, CheckCircle2, FileUp, Trash2, Download } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { differenceInCalendarDays } from 'date-fns'
 import { blink } from '../blink/client'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useAuth } from '../hooks/useAuth'
+import { exportComplianceVaultPdf } from '../lib/pdf'
+
+const EXPIRY_WARNING_DAYS = 30
+
+function getExpiryState(expiryDate?: string): 'none' | 'expired' | 'soon' | 'ok' {
+  if (!expiryDate) return 'none'
+  const days = differenceInCalendarDays(new Date(expiryDate), new Date())
+  if (days < 0) return 'expired'
+  if (days <= EXPIRY_WARNING_DAYS) return 'soon'
+  return 'ok'
+}
 
 interface ComplianceDoc {
   id: string
@@ -20,7 +32,7 @@ export default function VaultPage() {
   const { user, profile } = useAuth()
   const queryClient = useQueryClient()
   const [isAdding, setIsAdding] = useState(false)
-  const [newDoc, setNewDoc] = useState({ title: '', category: 'attestation', file: null as File | null })
+  const [newDoc, setNewDoc] = useState({ title: '', category: 'attestation', expiryDate: '', file: null as File | null })
   const [uploading, setUploading] = useState(false)
 
   const { data: docs, isLoading } = useQuery({
@@ -42,6 +54,7 @@ export default function VaultPage() {
         structureId: profile?.structureId || 'none',
         title: newDoc.title,
         category: newDoc.category,
+        expiryDate: newDoc.expiryDate || null,
         fileUrl: publicUrl,
         status: 'valid',
         createdAt: new Date().toISOString()
@@ -49,7 +62,7 @@ export default function VaultPage() {
 
       toast.success('Document ajouté avec succès')
       setIsAdding(false)
-      setNewDoc({ title: '', category: 'attestation', file: null })
+      setNewDoc({ title: '', category: 'attestation', expiryDate: '', file: null })
       queryClient.invalidateQueries({ queryKey: ['compliance_documents'] })
     } catch (error) {
       console.error('Upload error:', error)
@@ -58,6 +71,11 @@ export default function VaultPage() {
       setUploading(false)
     }
   }
+
+  const upcomingDeadlines = docs?.filter(d => {
+    const state = getExpiryState(d.expiryDate)
+    return state === 'expired' || state === 'soon'
+  }).length ?? 0
 
   const columns: ColumnDef<ComplianceDoc>[] = [
     {
@@ -90,6 +108,30 @@ export default function VaultPage() {
       cell: ({ row }) => <span className="text-sm text-muted-foreground">{new Date(row.original.createdAt).toLocaleDateString()}</span>
     },
     {
+      accessorKey: 'expiryDate',
+      header: 'Échéance',
+      cell: ({ row }) => {
+        const state = getExpiryState(row.original.expiryDate)
+        if (state === 'none') return <span className="text-sm text-muted-foreground/60">—</span>
+        const label = new Date(row.original.expiryDate!).toLocaleDateString()
+        if (state === 'expired') {
+          return (
+            <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 gap-1">
+              <AlertCircle className="w-3 h-3" /> Expiré le {label}
+            </Badge>
+          )
+        }
+        if (state === 'soon') {
+          return (
+            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1">
+              <Clock className="w-3 h-3" /> Expire le {label}
+            </Badge>
+          )
+        }
+        return <span className="text-sm text-muted-foreground">{label}</span>
+      }
+    },
+    {
       id: 'actions',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
@@ -114,6 +156,18 @@ export default function VaultPage() {
           </PageDescription>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            disabled={!docs || docs.length === 0}
+            onClick={() => exportComplianceVaultPdf({
+              fullName: profile?.fullName,
+              generatedAt: new Date(),
+              documents: docs ?? []
+            })}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Exporter le dossier (PDF)
+          </Button>
           <Button onClick={() => setIsAdding(true)} className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
             <Plus className="w-4 h-4 mr-2" />
             Ajouter une preuve
@@ -131,7 +185,8 @@ export default function VaultPage() {
           />
           <Stat
             label="Échéances proches"
-            value="0"
+            value={upcomingDeadlines.toString()}
+            description={upcomingDeadlines > 0 ? `Dans les ${EXPIRY_WARNING_DAYS} prochains jours ou dépassées` : 'Aucune échéance à traiter'}
             icon={<Clock className="text-amber-500" />}
             className="bg-amber-50/30 border-amber-100 shadow-sm"
           />
@@ -197,6 +252,18 @@ export default function VaultPage() {
                     <SelectItem value="reglementaire">Réglementation structure</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="expiryDate" className="text-sm font-bold uppercase tracking-widest text-muted-foreground/80">
+                  Date d'expiration <span className="normal-case font-medium text-muted-foreground/60">(optionnel)</span>
+                </Label>
+                <Input
+                  id="expiryDate"
+                  type="date"
+                  value={newDoc.expiryDate}
+                  onChange={(e) => setNewDoc(prev => ({ ...prev, expiryDate: e.target.value }))}
+                  className="rounded-xl h-12 focus:ring-primary/20"
+                />
               </div>
               <div className="grid gap-2">
                 <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground/80">Fichier</Label>
