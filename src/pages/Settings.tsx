@@ -11,7 +11,7 @@ import { Building2, User, Lock, Camera, CheckCircle2, Mail, ShieldCheck, AlertCi
 import { useAuth } from '../hooks/useAuth'
 import { blink } from '../blink/client'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ROLE_LABELS, ROLE_DESCRIPTIONS, type UserRole } from '../lib/rbac'
+import { ROLE_LABELS, ROLE_DESCRIPTIONS, getPermissions, type UserRole } from '../lib/rbac'
 import RoleGuard from '../components/RoleGuard'
 
 export default function SettingsPage() {
@@ -434,7 +434,7 @@ export default function SettingsPage() {
                         </div>
                         <div className="px-6 py-4">
                           <div className="flex flex-wrap gap-2">
-                            {(import('./../../src/lib/rbac') as any, getPermissionsForRole(role)).map((perm: string) => (
+                            {getPermissions(role).map((perm: string) => (
                               <span
                                 key={perm}
                                 className="inline-flex items-center px-2.5 py-1 rounded-lg bg-secondary text-secondary-foreground text-[11px] font-mono font-bold"
@@ -455,15 +455,4 @@ export default function SettingsPage() {
       </PageBody>
     </Page>
   )
-}
-
-// Helper to avoid circular import in JSX
-function getPermissionsForRole(role: UserRole): string[] {
-  const map: Record<UserRole, string[]> = {
-    professional: ['diagnostic:create', 'diagnostic:view_own', 'catalog:view', 'vault:upload', 'vault:view_own', 'structure:view'],
-    trainer: ['diagnostic:create', 'diagnostic:view_own', 'catalog:view', 'catalog:manage', 'vault:upload', 'vault:view_own', 'structure:view'],
-    manager: ['diagnostic:create', 'diagnostic:view_all', 'catalog:manage', 'vault:view_all', 'vault:delete', 'team:manage', 'team:invite', 'structure:manage'],
-    admin: ['diagnostic:*', 'catalog:*', 'vault:*', 'team:*', 'structure:*', 'admin:users', 'admin:platform'],
-  }
-  return map[role] ?? []
 }
