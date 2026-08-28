@@ -32,6 +32,7 @@ import VaultPage from './pages/Vault'
 import TeamPage from './pages/Team'
 import SettingsPage from './pages/Settings'
 import VerifyEmailPage from './pages/VerifyEmail'
+import AcceptInvitePage from './pages/AcceptInvite'
 
 // ── Layout ────────────────────────────────────────────────────────────────────
 function MainLayout({ children }: { children: React.ReactNode }) {
@@ -40,7 +41,8 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
   const isPublicRoute =
     window.location.pathname === '/landing' ||
-    window.location.pathname === '/verify-email'
+    window.location.pathname === '/verify-email' ||
+    window.location.pathname === '/accept-invite'
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated && !isPublicRoute) {
@@ -212,11 +214,12 @@ const teamRoute = createRoute({ getParentRoute: () => rootRoute, path: '/team', 
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })
 const landingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/landing', component: LandingPage })
 const verifyEmailRoute = createRoute({ getParentRoute: () => rootRoute, path: '/verify-email', component: VerifyEmailPage })
+const acceptInviteRoute = createRoute({ getParentRoute: () => rootRoute, path: '/accept-invite', component: AcceptInvitePage })
 
 const routeTree = rootRoute.addChildren([
   indexRoute, diagnosticRoute, catalogRoute,
   vaultRoute, teamRoute, settingsRoute,
-  landingRoute, verifyEmailRoute,
+  landingRoute, verifyEmailRoute, acceptInviteRoute,
 ])
 
 const router = createRouter({ routeTree })
