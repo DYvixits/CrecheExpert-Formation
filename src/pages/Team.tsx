@@ -5,8 +5,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { blink } from '../blink/client'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useAuth, UserProfile } from '../hooks/useAuth'
+import RoleGuard from '../components/RoleGuard'
 
 export default function TeamPage() {
+  return (
+    <RoleGuard minRole="manager">
+      <TeamPageContent />
+    </RoleGuard>
+  )
+}
+
+function TeamPageContent() {
   const { user, profile } = useAuth()
   const queryClient = useQueryClient()
   const [isAdding, setIsAdding] = useState(false)
