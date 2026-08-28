@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: Install & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+# NOTE: `bun run lint` (ESLint, Stylelint, contrôles de variables CSS) et
+# `bun run lint:types` (tsc) ne sont volontairement pas exécutés ici : ils
+# échouent déjà sur la branche principale, indépendamment de ce workflow
+# (config ESLint/Stylelint manquante, scripts scripts/check-css-*.js absents
+# du dépôt, ~95 erreurs TypeScript préexistantes dans les pages). Les
+# rebrancher nécessite d'abord de corriger ces points — voir
+# docs/ANALYSE-COMPLETE.md. Ce garde-fou ne bloque pour l'instant que les
+# régressions de build, déjà une amélioration par rapport à l'absence
+# totale de CI.
