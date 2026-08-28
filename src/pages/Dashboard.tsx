@@ -5,6 +5,15 @@ import { useAuth } from '../hooks/useAuth'
 import { blink } from '../blink/client'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { differenceInCalendarDays } from 'date-fns'
+
+const EXPIRY_WARNING_DAYS = 30
+
+interface AssessmentResponse {
+  questionId: string
+  isCompliant: number | boolean
+  remediationAdvice?: string
+}
 
 export default function DashboardPage() {
   const { profile, user } = useAuth()
@@ -20,6 +29,39 @@ export default function DashboardPage() {
 
   const latestAssessment = assessments?.[0]
   const isCompliant = latestAssessment?.score && Number(latestAssessment.score) >= 0.8
+
+  const { data: latestResponses } = useQuery({
+    queryKey: ['assessment_responses', latestAssessment?.id],
+    queryFn: () => blink.db.assessment_responses.list({ where: { assessmentId: latestAssessment?.id } }) as unknown as Promise<AssessmentResponse[]>,
+    enabled: !!latestAssessment?.id
+  })
+
+  const nonCompliantResponses = (latestResponses ?? []).filter(r => !Number(r.isCompliant))
+  const topRemediation = nonCompliantResponses.find(r => r.remediationAdvice)
+
+  const { data: documents } = useQuery({
+    queryKey: ['compliance_documents', user?.id],
+    queryFn: () => blink.db.compliance_documents.list({ where: { userId: user?.id } }) as Promise<{ expiryDate?: string }[]>,
+    enabled: !!user?.id
+  })
+
+  const expiringDocuments = (documents ?? []).filter(d => {
+    if (!d.expiryDate) return false
+    return differenceInCalendarDays(new Date(d.expiryDate), new Date()) <= EXPIRY_WARNING_DAYS
+  }).length
+
+  const regulatoryAlerts = nonCompliantResponses.length + expiringDocuments
+
+  const { data: enrollments } = useQuery({
+    queryKey: ['training_enrollments', user?.id],
+    queryFn: () => blink.db.training_enrollments.list({ where: { userId: user?.id, status: 'in_progress' } }) as Promise<{ id: string; trainingId: string }[]>,
+    enabled: !!user?.id
+  })
+
+  const { data: recommendedTrainings } = useQuery({
+    queryKey: ['trainings', 'recommended'],
+    queryFn: () => blink.db.training_catalog.list({ where: { category: 'Regulatory' }, limit: 2 }) as Promise<{ id: string; title: string; duration: string; labels: string }[]>
+  })
 
   return (
     <Page className="animate-fade-in">
@@ -50,15 +92,15 @@ export default function DashboardPage() {
           />
           <Stat
             label="Formations en cours"
-            value="3"
+            value={(enrollments?.length ?? 0).toString()}
             icon={<GraduationCap className="text-primary" />}
-            description="Salariés en cours de certification"
+            description="Inscriptions actives au catalogue"
           />
           <Stat
             label="Alertes Réglementaires"
-            value="2"
+            value={regulatoryAlerts.toString()}
             icon={<AlertCircle className="text-destructive" />}
-            description="Échéances à moins de 30 jours"
+            description="Non-conformités + échéances à moins de 30 jours"
           />
         </StatGroup>
 
@@ -71,17 +113,31 @@ export default function DashboardPage() {
             <CardContent className="space-y-4">
               {latestAssessment ? (
                 <>
-                  <div className="p-4 rounded-xl bg-secondary/50 border border-secondary">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-                      <div>
-                        <p className="font-semibold text-sm">Action Requise : Taux d'encadrement</p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Votre structure est à 85% de conformité sur le volet RH. Un recrutement est conseillé d'ici septembre.
-                        </p>
+                  {topRemediation ? (
+                    <div className="p-4 rounded-xl bg-secondary/50 border border-secondary">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                        <div>
+                          <p className="font-semibold text-sm">Action requise</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {topRemediation.remediationAdvice}
+                          </p>
+                          {nonCompliantResponses.length > 1 && (
+                            <p className="text-xs text-muted-foreground/70 mt-1">
+                              +{nonCompliantResponses.length - 1} autre{nonCompliantResponses.length - 1 > 1 ? 's' : ''} point{nonCompliantResponses.length - 1 > 1 ? 's' : ''} à traiter
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+                      <div className="flex items-start gap-3">
+                        <ShieldCheck className="w-5 h-5 text-emerald-600 mt-0.5" />
+                        <p className="text-sm text-emerald-700 font-medium">Aucun point de non-conformité détecté sur ce diagnostic.</p>
+                      </div>
+                    </div>
+                  )}
                   <Button variant="outline" className="w-full" onClick={() => navigate({ to: '/diagnostic' })}>
                     Consulter le rapport complet
                     <ArrowRight className="w-4 h-4 ml-2" />
@@ -105,20 +161,23 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group border border-transparent hover:border-border">
-                  <div className="flex flex-col">
-                    <span className="font-medium text-sm">Recyclage Secourisme PSC1</span>
-                    <span className="text-xs text-muted-foreground">Obligatoire • 7h • CPF/OPCO</span>
-                  </div>
-                  <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group border border-transparent hover:border-border">
-                  <div className="flex flex-col">
-                    <span className="font-medium text-sm">Mise en conformité décret 2026</span>
-                    <span className="text-xs text-muted-foreground">Recommandé • 14h • Dirigeants</span>
-                  </div>
-                  <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
+                {recommendedTrainings && recommendedTrainings.length > 0 ? (
+                  recommendedTrainings.map(training => (
+                    <div
+                      key={training.id}
+                      className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group border border-transparent hover:border-border"
+                      onClick={() => navigate({ to: '/catalog' })}
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm">{training.title}</span>
+                        <span className="text-xs text-muted-foreground">{training.duration} • {training.labels}</span>
+                      </div>
+                      <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Aucune formation réglementaire recommandée pour le moment.</p>
+                )}
               </div>
               <Button variant="ghost" className="w-full text-primary" onClick={() => navigate({ to: '/catalog' })}>
                 Voir tout le catalogue
