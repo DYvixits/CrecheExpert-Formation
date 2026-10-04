@@ -7,6 +7,7 @@ import { blink } from '../blink/client'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useAuth } from '../hooks/useAuth'
 import { exportComplianceVaultPdf } from '../lib/pdf'
+import { openVaultDocument, deleteVaultDocument } from '../lib/vaultAccess'
 
 const EXPIRY_WARNING_DAYS = 30
 
@@ -24,7 +25,6 @@ interface ComplianceDoc {
   category: string
   status: string
   expiryDate?: string
-  fileUrl: string
   createdAt: string
 }
 
@@ -34,10 +34,17 @@ export default function VaultPage() {
   const [isAdding, setIsAdding] = useState(false)
   const [newDoc, setNewDoc] = useState({ title: '', category: 'attestation', expiryDate: '', file: null as File | null })
   const [uploading, setUploading] = useState(false)
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null)
 
   const { data: docs, isLoading } = useQuery({
     queryKey: ['compliance_documents', user?.id],
-    queryFn: () => blink.db.compliance_documents.list({ where: { userId: user?.id }, orderBy: { createdAt: 'desc' } }) as unknown as ComplianceDoc[],
+    queryFn: () => blink.db.compliance_documents.list({
+      where: { userId: user?.id },
+      orderBy: { createdAt: 'desc' },
+      // Never select fileUrl/filePath here: the browser must not hold Blink's permanent,
+      // unauthenticated storage link. Access goes through the vault-document function instead.
+      select: ['id', 'title', 'category', 'status', 'expiryDate', 'createdAt']
+    }) as unknown as ComplianceDoc[],
     enabled: !!user?.id
   })
 
@@ -45,8 +52,8 @@ export default function VaultPage() {
     if (!user || !newDoc.file || !newDoc.title) return
     setUploading(true)
     try {
-      const fileName = `compliance/${user.id}/${Date.now()}_${newDoc.file.name}`
-      const { publicUrl } = await blink.storage.upload(newDoc.file, fileName)
+      const filePath = `compliance/${user.id}/${Date.now()}_${newDoc.file.name}`
+      await blink.storage.upload(newDoc.file, filePath)
 
       await blink.db.compliance_documents.create({
         id: `doc_${Date.now()}`,
@@ -55,7 +62,7 @@ export default function VaultPage() {
         title: newDoc.title,
         category: newDoc.category,
         expiryDate: newDoc.expiryDate || null,
-        fileUrl: publicUrl,
+        filePath,
         status: 'valid',
         createdAt: new Date().toISOString()
       })
@@ -69,6 +76,33 @@ export default function VaultPage() {
       toast.error('Erreur lors de l\'upload')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleConsult = async (doc: ComplianceDoc) => {
+    setPendingActionId(doc.id)
+    try {
+      await openVaultDocument(doc.id)
+    } catch (error) {
+      console.error('Error opening document:', error)
+      toast.error(error instanceof Error ? error.message : "Impossible d'ouvrir le document")
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
+  const handleDelete = async (doc: ComplianceDoc) => {
+    if (!window.confirm(`Supprimer définitivement "${doc.title}" ?`)) return
+    setPendingActionId(doc.id)
+    try {
+      await deleteVaultDocument(doc.id)
+      toast.success('Document supprimé')
+      queryClient.invalidateQueries({ queryKey: ['compliance_documents'] })
+    } catch (error) {
+      console.error('Error deleting document:', error)
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de la suppression')
+    } finally {
+      setPendingActionId(null)
     }
   }
 
@@ -135,10 +169,22 @@ export default function VaultPage() {
       id: 'actions',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => window.open(row.original.fileUrl, '_blank')} className="text-primary hover:bg-primary/5 font-bold">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={pendingActionId === row.original.id}
+            onClick={() => handleConsult(row.original)}
+            className="text-primary hover:bg-primary/5 font-bold"
+          >
             Consulter
           </Button>
-          <Button variant="ghost" size="icon" className="text-destructive/60 hover:text-destructive hover:bg-destructive/5">
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={pendingActionId === row.original.id}
+            onClick={() => handleDelete(row.original)}
+            className="text-destructive/60 hover:text-destructive hover:bg-destructive/5"
+          >
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
