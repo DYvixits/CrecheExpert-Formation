@@ -35,6 +35,10 @@ function TeamPageContent() {
   const [isAdding, setIsAdding] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [invite, setInvite] = useState<{ email: string; role: UserRole }>({ email: '', role: 'professional' })
+  const [editingMember, setEditingMember] = useState<UserProfile | null>(null)
+  const [editRole, setEditRole] = useState<UserRole>('professional')
+  const [isSavingRole, setIsSavingRole] = useState(false)
+  const [pendingMemberId, setPendingMemberId] = useState<string | null>(null)
 
   const { data: team, isLoading } = useQuery({
     queryKey: ['team_members', profile?.structureId],
@@ -95,18 +99,75 @@ function TeamPageContent() {
     },
     {
       id: 'actions',
-      cell: () => (
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="text-muted-foreground/60 hover:text-primary hover:bg-primary/5">
-            <Edit2 className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/5">
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      )
+      cell: ({ row }) => {
+        const isSelf = row.original.userId === user?.id
+        const isPending = pendingMemberId === row.original.userId
+        return (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={isSelf || isPending}
+              title={isSelf ? 'Modifiez votre propre rôle depuis Paramètres' : 'Modifier le rôle'}
+              onClick={() => handleOpenEdit(row.original)}
+              className="text-muted-foreground/60 hover:text-primary hover:bg-primary/5"
+            >
+              <Edit2 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={isSelf || isPending}
+              title={isSelf ? 'Vous ne pouvez pas vous retirer vous-même' : "Retirer de l'équipe"}
+              onClick={() => handleRemoveMember(row.original)}
+              className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/5"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )
+      }
     }
   ]
+
+  const handleOpenEdit = (member: UserProfile) => {
+    setEditingMember(member)
+    setEditRole((member.role as UserRole) || 'professional')
+  }
+
+  const handleSaveRole = async () => {
+    if (!editingMember) return
+    setIsSavingRole(true)
+    try {
+      await blink.db.user_profiles.update({ userId: editingMember.userId }, { role: editRole })
+      toast.success(`Rôle de ${editingMember.fullName} mis à jour`)
+      setEditingMember(null)
+      queryClient.invalidateQueries({ queryKey: ['team_members'] })
+    } catch (error) {
+      console.error('Error updating role:', error)
+      toast.error('Erreur lors de la mise à jour du rôle')
+    } finally {
+      setIsSavingRole(false)
+    }
+  }
+
+  const handleRemoveMember = async (member: UserProfile) => {
+    if (!window.confirm(`Retirer ${member.fullName} de l'équipe ?`)) return
+    setPendingMemberId(member.userId)
+    try {
+      // Unlinks the member from this structure rather than deleting their profile:
+      // a hard delete would silently resurrect a blank one on their next login
+      // (see useAuth.ts), losing their role/diploma history for no real benefit.
+      await blink.db.user_profiles.update({ userId: member.userId }, { structureId: null })
+      toast.success(`${member.fullName} a été retiré de l'équipe`)
+      queryClient.invalidateQueries({ queryKey: ['team_members'] })
+    } catch (error) {
+      console.error('Error removing member:', error)
+      toast.error('Erreur lors du retrait du membre')
+    } finally {
+      setPendingMemberId(null)
+    }
+  }
 
   const handleInvite = async () => {
     if (!invite.email || !invite.role || !user || !profile?.structureId) return
@@ -258,6 +319,37 @@ function TeamPageContent() {
             <DialogFooter>
               <Button onClick={handleInvite} disabled={isSending || !invite.email} className="w-full rounded-xl h-12 bg-primary hover:bg-primary/90 font-bold">
                 {isSending ? 'Envoi...' : "Envoyer l'invitation"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!editingMember} onOpenChange={(open) => !open && setEditingMember(null)}>
+          <DialogContent className="sm:max-w-[425px] rounded-3xl p-8 shadow-2xl border-none">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold tracking-tight">Modifier le rôle</DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                {editingMember?.fullName}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-6">
+              <div className="grid gap-2">
+                <Label htmlFor="editRole" className="text-sm font-bold uppercase tracking-widest text-muted-foreground/80">Rôle au sein de l'équipe</Label>
+                <Select value={editRole} onValueChange={(v) => setEditRole(v as UserRole)}>
+                  <SelectTrigger className="rounded-xl h-12">
+                    <SelectValue placeholder="Choisir un rôle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INVITABLE_ROLES.map(role => (
+                      <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleSaveRole} disabled={isSavingRole} className="w-full rounded-xl h-12 bg-primary hover:bg-primary/90 font-bold">
+                {isSavingRole ? 'Enregistrement...' : 'Enregistrer'}
               </Button>
             </DialogFooter>
           </DialogContent>
