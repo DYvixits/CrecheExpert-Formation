@@ -40,8 +40,12 @@ export default function DashboardPage() {
   const topRemediation = nonCompliantResponses.find(r => r.remediationAdvice)
 
   const { data: documents } = useQuery({
-    queryKey: ['compliance_documents', user?.id],
-    queryFn: () => blink.db.compliance_documents.list({ where: { userId: user?.id } }) as Promise<{ expiryDate?: string }[]>,
+    queryKey: ['compliance_documents', 'expiry', user?.id],
+    queryFn: () => blink.db.compliance_documents.list({
+      where: { userId: user?.id },
+      // Only the expiry count is needed here — never pull fileUrl/filePath into the browser.
+      select: ['expiryDate']
+    }) as Promise<{ expiryDate?: string }[]>,
     enabled: !!user?.id
   })
 

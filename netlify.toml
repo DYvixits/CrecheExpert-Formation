@@ -1,0 +1,9 @@
+[build]
+  command = "bun run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[dev]
+  command = "bun run dev"
+  targetPort = 3000
+  port = 8888

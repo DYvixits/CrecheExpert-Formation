@@ -2,6 +2,24 @@
 
 This template includes built-in detection for missing CSS variables between your Tailwind config and CSS files.
 
+## Coffre-fort : fonction `vault-document` (Netlify)
+
+Blink storage n'a aucune notion de fichier privé ou d'URL signée : `blink.storage.upload()` renvoie
+toujours un lien public permanent. `netlify/functions/vault-document.ts` est la vraie barrière de
+confidentialité — elle vérifie côté serveur (avec la `secretKey` Blink, jamais exposée au client)
+que l'appelant possède le document ou gère sa structure, avant de streamer le fichier. Le navigateur
+ne reçoit plus jamais l'URL de stockage brute.
+
+À configurer dans les variables d'environnement Netlify (jamais dans `.env.local`, jamais commité) :
+
+- `BLINK_SECRET_KEY` — générée depuis le dashboard du projet Blink (clé serveur, permanente).
+- `BLINK_PROJECT_ID` — optionnel si `VITE_BLINK_PROJECT_ID` est déjà défini, sinon requis.
+
+Sans ces variables, la fonction répond `500` sur toute consultation/suppression de document.
+Limite connue : les réponses Netlify Functions synchrones plafonnent autour de 6 Mo — un document
+scanné plus volumineux échouera avec une `502` (nécessiterait une réécriture en Edge Function pour
+du streaming).
+
 ## Features
 
 - **CSS Variable Detection**: Automatically detects if CSS variables referenced in `tailwind.config.cjs` are defined in `src/index.css`
